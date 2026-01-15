@@ -1,0 +1,17 @@
+{
+  "name": "fleet-api",
+  "version": "1.0.0",
+  "description": "Professional Node.js Express API for SQL Server",
+  "main": "index.js",
+  "scripts": {
+    "start": "node index.js"
+  },
+  "keywords": ["express", "mssql", "api"],
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "express": "^5.0.0",
+    "mssql": "^11.0.1",
+    "dotenv": "^16.4.5"
+  }
+}
