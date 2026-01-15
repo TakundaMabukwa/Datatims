@@ -9,7 +9,6 @@ const config = {
   port: parseInt(process.env.PROXY_PORT),
   user: process.env.DB_USER,
   password: process.env.DB_PASS,
-  database: process.env.DB_NAME,
   options: {
     encrypt: true,
     trustServerCertificate: true,
@@ -23,6 +22,10 @@ const config = {
   connectionTimeout: 60000,
   requestTimeout: 60000
 };
+
+if (process.env.DB_NAME) {
+  config.database = process.env.DB_NAME;
+}
 
 let pool = null;
 let isConnecting = false;
