@@ -1,6 +1,8 @@
 require('dotenv').config();
 const express = require('express');
 const helmet = require('helmet');
+const ChainProxy = require('./config/proxy');
+const syncService = require('./config/sync');
 const authenticate = require('./middleware/auth');
 const apiRoutes = require('./routes/api');
 
@@ -9,7 +11,20 @@ const PORT = process.env.PORT || 3000;
 
 console.log('[SERVER] Initializing Datatims API...');
 console.log(`[SERVER] Environment: ${process.env.NODE_ENV || 'development'}`);
-console.log('[SERVER] Database connection: DISABLED (waiting for whitelist)');
+console.log('[SERVER] Mode: Daily sync with cached data');
+
+/**
+ * Initialize TCP proxy for IP chain routing
+ */
+const proxy = new ChainProxy(
+  process.env.IP1,
+  process.env.IP2,
+  process.env.DB_HOST,
+  parseInt(process.env.DB_PORT),
+  parseInt(process.env.PROXY_PORT)
+);
+
+proxy.start();
 
 /**
  * Security middleware
@@ -41,9 +56,20 @@ app.use((err, req, res, next) => {
 });
 
 /**
- * Start server without database connection
+ * Start server and initialize daily sync
  */
-app.listen(PORT, () => {
-  console.log(`[SERVER] ✓ Server running on port ${PORT}`);
-  console.log('[SERVER] Ready to accept requests (DB endpoints will return 503 until whitelisted)');
+async function start() {
+  app.listen(PORT, () => {
+    console.log(`[SERVER] ✓ Server running on port ${PORT}`);
+    console.log('[SERVER] Initializing daily sync service...');
+    syncService.init();
+  });
+}
+
+start();
+
+// Cleanup on exit
+process.on('SIGINT', () => {
+  proxy.stop();
+  process.exit();
 });
