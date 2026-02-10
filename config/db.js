@@ -1,12 +1,25 @@
 const sql = require('mssql');
+const { Client } = require('ssh2');
 
 /**
- * Database Connection Manager (via local TCP proxy)
- * Connects to localhost proxy which routes through IP1 → IP2 → DB Server
+ * Connection Manager
+ * If SSH_HOST is provided, connect via SSH tunnel.
+ * Otherwise, connect directly to SQL Server.
  */
-const config = {
-  server: '127.0.0.1',
-  port: parseInt(process.env.PROXY_PORT),
+let sshClient = null;
+let pool = null;
+let isConnecting = false;
+
+const sshConfig = {
+  host: process.env.SSH_HOST,
+  port: parseInt(process.env.SSH_PORT) || 22,
+  username: process.env.SSH_USER,
+  password: process.env.SSH_PASS
+};
+
+const dbConfig = {
+  server: process.env.DB_HOST,
+  port: parseInt(process.env.DB_PORT),
   user: process.env.DB_USER,
   password: process.env.DB_PASS,
   options: {
@@ -24,16 +37,13 @@ const config = {
 };
 
 if (process.env.DB_NAME) {
-  config.database = process.env.DB_NAME;
+  dbConfig.database = process.env.DB_NAME;
 }
 
-let pool = null;
-let isConnecting = false;
-
 /**
- * Initialize connection pool
+ * Establish SQL connection (direct or via SSH tunnel)
  */
-async function createPool() {
+async function createConnection() {
   if (isConnecting) {
     while (isConnecting) {
       await new Promise(resolve => setTimeout(resolve, 100));
@@ -42,19 +52,85 @@ async function createPool() {
   }
 
   isConnecting = true;
+  
   try {
-    console.log(`[DB] Connecting via proxy on localhost:${config.port}...`);
-    pool = await sql.connect(config);
-    
-    pool.on('error', err => {
-      console.error('[DB] Pool error:', err.message);
+    if (pool) {
+      await pool.close().catch(() => {});
       pool = null;
-    });
+    }
+    if (sshClient) {
+      sshClient.end();
+      sshClient = null;
+    }
 
-    console.log('[DB] ✓ Connection established through IP chain');
+    if (sshConfig.host) {
+      console.log(`[SSH] Connecting to ${sshConfig.host}:${sshConfig.port}...`);
+      
+      await new Promise((resolve, reject) => {
+        sshClient = new Client();
+        
+        sshClient.on('ready', () => {
+          console.log('[SSH] ✓ Tunnel established');
+          resolve();
+        });
+        
+        sshClient.on('error', (err) => {
+          console.error('[SSH] Connection error:', err.message);
+          reject(err);
+        });
+        
+        sshClient.on('end', () => {
+          console.log('[SSH] Connection closed');
+          pool = null;
+        });
+        
+        sshClient.connect(sshConfig);
+      });
+
+      console.log(`[DB] Connecting to ${dbConfig.server}:${dbConfig.port} through tunnel...`);
+      
+      pool = await new Promise((resolve, reject) => {
+        sshClient.forwardOut(
+          '127.0.0.1',
+          0,
+          dbConfig.server,
+          dbConfig.port,
+          (err, stream) => {
+            if (err) {
+              console.error('[DB] Tunnel forward error:', err.message);
+              return reject(err);
+            }
+
+            const config = { ...dbConfig, stream };
+            sql.connect(config)
+              .then(p => {
+                console.log('[DB] ✓ Connected through SSH tunnel');
+                
+                p.on('error', err => {
+                  console.error('[DB] Pool error:', err.message);
+                  pool = null;
+                });
+                
+                resolve(p);
+              })
+              .catch(reject);
+          }
+        );
+      });
+    } else {
+      console.log(`[DB] Connecting directly to ${dbConfig.server}:${dbConfig.port}...`);
+      pool = await sql.connect(dbConfig);
+      console.log('[DB] ✓ Connected directly');
+      pool.on('error', err => {
+        console.error('[DB] Pool error:', err.message);
+        pool = null;
+      });
+    }
+
     return pool;
   } catch (err) {
-    console.error('[DB] Connection failed:', err.message);
+    console.error('[CONNECTION] Failed:', err.message);
+    if (sshClient) sshClient.end();
     pool = null;
     throw err;
   } finally {
@@ -67,8 +143,8 @@ async function createPool() {
  */
 async function getPool() {
   if (!pool || !pool.connected) {
-    console.log('[DB] Reconnecting...');
-    await createPool();
+    console.log('[CONNECTION] Establishing SSH tunnel...');
+    await createConnection();
   }
   return pool;
 }
@@ -108,7 +184,7 @@ async function getVehicles() {
  */
 async function checkHealth() {
   await executeQuery('SELECT 1 AS status');
-  return { connected: true, proxy: 'active', chain: `${process.env.IP1} → ${process.env.IP2} → ${process.env.DB_HOST}` };
+  return { connected: true, tunnel: 'active', server: dbConfig.server };
 }
 
 module.exports = { getPool, getDrivers, getDriverMaster, getVehicles, checkHealth };
