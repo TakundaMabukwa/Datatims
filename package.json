@@ -4,7 +4,10 @@
   "description": "Professional Node.js Express API for SQL Server",
   "main": "index.js",
   "scripts": {
-    "start": "node index.js"
+    "start": "node index.js",
+    "test:net": "node scripts/net-check.js",
+    "test:db": "node scripts/db-check.js",
+    "test": "npm run test:net && npm run test:db"
   },
   "keywords": ["express", "mssql", "api"],
   "author": "",
