@@ -1,23 +1,24 @@
 {
   "name": "fleet-api",
   "version": "1.0.0",
-  "description": "Professional Node.js Express API for SQL Server",
+  "description": "Node.js Express API for Datatims MySQL views",
   "main": "index.js",
   "scripts": {
     "start": "node index.js",
     "test:net": "node scripts/net-check.js",
     "test:connect": "node scripts/db-connect.js",
     "test:db": "node scripts/db-check.js",
+    "test:probe": "node scripts/db-probe.js",
+    "test:views": "node scripts/view-check.js",
     "test": "npm run test:net && npm run test:db"
   },
-  "keywords": ["express", "mssql", "api"],
+  "keywords": ["express", "mysql", "api"],
   "author": "",
   "license": "ISC",
   "dependencies": {
     "express": "^5.0.0",
-    "mssql": "^11.0.1",
+    "mysql2": "^3.11.3",
     "dotenv": "^16.4.5",
-    "helmet": "^8.0.0",
-    "ssh2": "^1.16.0"
+    "helmet": "^8.0.0"
   }
 }

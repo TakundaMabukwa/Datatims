@@ -1,6 +1,13 @@
 const fs = require('fs').promises;
 const path = require('path');
-const { getDrivers, getDriverMaster, getVehicles } = require('./db');
+const {
+  getDrivers,
+  getDriverMaster,
+  getVehicles,
+  getLogDrivers,
+  getLogDriverMaster,
+  getLogVehicles
+} = require('./db');
 
 const DATA_DIR = path.join(__dirname, '../data');
 const SYNC_INTERVAL = 24 * 60 * 60 * 1000; // 24 hours
@@ -28,16 +35,22 @@ class SyncService {
     console.log('[SYNC] Starting daily data pull...');
 
     try {
-      const [drivers, driverMaster, vehicles] = await Promise.all([
+      const [drivers, driverMaster, vehicles, logDrivers, logDriverMaster, logVehicles] = await Promise.all([
         getDrivers(),
         getDriverMaster(),
-        getVehicles()
+        getVehicles(),
+        getLogDrivers(),
+        getLogDriverMaster(),
+        getLogVehicles()
       ]);
 
       await Promise.all([
         fs.writeFile(path.join(DATA_DIR, 'drivers.json'), JSON.stringify(drivers, null, 2)),
         fs.writeFile(path.join(DATA_DIR, 'driver-master.json'), JSON.stringify(driverMaster, null, 2)),
-        fs.writeFile(path.join(DATA_DIR, 'vehicles.json'), JSON.stringify(vehicles, null, 2))
+        fs.writeFile(path.join(DATA_DIR, 'vehicles.json'), JSON.stringify(vehicles, null, 2)),
+        fs.writeFile(path.join(DATA_DIR, 'log-drivers.json'), JSON.stringify(logDrivers, null, 2)),
+        fs.writeFile(path.join(DATA_DIR, 'log-driver-master.json'), JSON.stringify(logDriverMaster, null, 2)),
+        fs.writeFile(path.join(DATA_DIR, 'log-vehicles.json'), JSON.stringify(logVehicles, null, 2))
       ]);
 
       this.lastSync = new Date();

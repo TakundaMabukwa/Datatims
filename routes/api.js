@@ -44,6 +44,45 @@ router.get('/vehicles', async (req, res, next) => {
 });
 
 /**
+ * GET /api/log-drivers
+ * Returns cached log driver data from JSON file
+ */
+router.get('/log-drivers', async (req, res, next) => {
+  try {
+    const data = await syncService.getData('log-drivers.json');
+    res.json(data);
+  } catch (err) {
+    res.status(503).json({ error: 'Data not available', details: err.message });
+  }
+});
+
+/**
+ * GET /api/log-driver-master
+ * Returns cached log driver master data from JSON file
+ */
+router.get('/log-driver-master', async (req, res, next) => {
+  try {
+    const data = await syncService.getData('log-driver-master.json');
+    res.json(data);
+  } catch (err) {
+    res.status(503).json({ error: 'Data not available', details: err.message });
+  }
+});
+
+/**
+ * GET /api/log-vehicles
+ * Returns cached log vehicle data from JSON file
+ */
+router.get('/log-vehicles', async (req, res, next) => {
+  try {
+    const data = await syncService.getData('log-vehicles.json');
+    res.json(data);
+  } catch (err) {
+    res.status(503).json({ error: 'Data not available', details: err.message });
+  }
+});
+
+/**
  * GET /api/health
  * Basic health check
  */

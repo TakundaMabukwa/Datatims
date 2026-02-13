@@ -10,7 +10,8 @@ const COMMON_PORTS = [
   8080, 8081, 8443, 8888, 9000, 9090, 9200, 9300, 10000, 10443, 11211
 ];
 
-const PORTS = (process.env.NET_PORTS || '')
+const RAW_NET_PORTS = (process.env.NET_PORTS || '').trim();
+const PORTS = RAW_NET_PORTS
   .split(',')
   .map(p => parseInt(p.trim(), 10))
   .filter(p => Number.isInteger(p) && p > 0);
@@ -43,7 +44,10 @@ function checkHostPort(host, port, timeoutMs = DEFAULT_TIMEOUT_MS) {
 
 async function run() {
   const basePort = parseInt(process.env.DB_PORT || '0', 10);
-  const portsToCheck = PORTS.length ? PORTS : (basePort ? [basePort] : COMMON_PORTS);
+  const useCommonPorts = RAW_NET_PORTS.toLowerCase() === 'common';
+  const portsToCheck = useCommonPorts
+    ? COMMON_PORTS
+    : (PORTS.length ? PORTS : (basePort ? [basePort] : COMMON_PORTS));
 
   const targets = [
     { label: 'DB_HOST', host: process.env.DB_HOST },
