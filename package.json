@@ -10,6 +10,7 @@
     "test:db": "node scripts/db-check.js",
     "test:probe": "node scripts/db-probe.js",
     "test:views": "node scripts/view-check.js",
+    "fetch:view": "node scripts/fetch-view.js",
     "test": "npm run test:net && npm run test:db"
   },
   "keywords": ["express", "mysql", "api"],
