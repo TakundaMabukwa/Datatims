@@ -1,5 +1,6 @@
 const fs = require('fs').promises;
 const path = require('path');
+const { connectVpn } = require('./vpn');
 const {
   getDrivers,
   getDriverMaster,
@@ -35,6 +36,8 @@ class SyncService {
     console.log('[SYNC] Starting daily data pull...');
 
     try {
+      await connectVpn();
+
       const [drivers, driverMaster, vehicles, logDrivers, logDriverMaster, logVehicles] = await Promise.all([
         getDrivers(),
         getDriverMaster(),

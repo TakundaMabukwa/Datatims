@@ -5,6 +5,10 @@
   "main": "index.js",
   "scripts": {
     "start": "node index.js",
+    "vpn:connect": "node scripts/vpn-connect.js",
+    "vpn:disconnect": "node scripts/vpn-disconnect.js",
+    "vpn:connect:bash": "scripts\\connect-vpn.cmd",
+    "vpn:test-fetch:bash": "scripts\\test-db-fetch.cmd",
     "test:net": "node scripts/net-check.js",
     "test:connect": "node scripts/db-connect.js",
     "test:db": "node scripts/db-check.js",
