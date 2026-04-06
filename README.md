@@ -56,3 +56,35 @@ What it does:
 - Runs `node scripts/fetch-view.js`
 
 If the server already runs as root or `sudo` is passwordless, you do not need `SUDO_PASSWORD`.
+
+## Supabase sync
+
+This repo can now upsert Datatims data into Supabase using the service role key.
+
+Commands:
+
+```bash
+npm run sync:supabase
+```
+
+If the DB is only reachable over VPN on the droplet:
+
+```bash
+npm run sync:supabase:live
+```
+
+Required env:
+- `SUPABASE_URL`
+- `SUPABASE_SERVICE_ROLE_KEY`
+
+Current source to target mapping:
+- `epssched.vsl_drmaster` -> `public.eps_client_list` using `client_id`
+- `epssched.vsl_tbldrivermaster` -> `public.drivers` using `driver_code`
+- `epssched.vsl_tblvehiclemaster` -> `public.vehiclesc` using `registration_number`
+
+Recommended Supabase indexes are in `scripts/supabase-indexes.sql`.
+
+Sync behavior:
+- insert when Datatims row is missing in Supabase
+- update when Datatims row differs from Supabase
+- leave unmatched Supabase rows untouched

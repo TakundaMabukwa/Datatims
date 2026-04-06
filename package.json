@@ -6,6 +6,8 @@
   "scripts": {
     "start": "node index.js",
     "pull:live": "bash ./scripts/pull-live.sh",
+    "sync:supabase": "node scripts/sync-supabase.js",
+    "sync:supabase:live": "bash ./scripts/sync-supabase-live.sh",
     "vpn:connect": "node scripts/vpn-connect.js",
     "vpn:disconnect": "node scripts/vpn-disconnect.js",
     "vpn:connect:bash": "scripts\\connect-vpn.cmd",
@@ -22,6 +24,7 @@
   "author": "",
   "license": "ISC",
   "dependencies": {
+    "@supabase/supabase-js": "^2.49.8",
     "express": "^5.0.0",
     "mysql2": "^3.11.3",
     "dotenv": "^16.4.5",
