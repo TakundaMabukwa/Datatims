@@ -30,3 +30,29 @@ Commands:
 Behavior:
 - `scripts/connect-vpn.sh` loads `.env`, reads `VPN_PASSWORD` or `vpn_password`, and passes it to `openconnect` with `--passwd-on-stdin`.
 - `scripts/test-db-fetch.sh` starts the VPN in background mode, waits briefly, then runs the existing Node fetch script.
+
+## Linux one-shot pull
+
+On the droplet, use:
+
+```bash
+bash ./scripts/pull-live.sh
+```
+
+Optional arguments:
+
+```bash
+bash ./scripts/pull-live.sh epssched.vsl_drmaster 25
+```
+
+What it does:
+- Loads `.env`
+- Reads `VPN_HOST` or `vpn_host`
+- Reads `VPN_USERNAME` or `vpn_username`
+- Reads `VPN_PASSWORD` or `vpn_password`
+- Optionally reads `SUDO_PASSWORD` or `sudo_password` for non-interactive `sudo`
+- Connects `openconnect` in background mode
+- Waits for `DB_HOST:DB_PORT`
+- Runs `node scripts/fetch-view.js`
+
+If the server already runs as root or `sudo` is passwordless, you do not need `SUDO_PASSWORD`.
