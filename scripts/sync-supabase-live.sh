@@ -6,6 +6,7 @@ ENV_FILE="${ENV_FILE:-$ROOT_DIR/.env}"
 VPN_PID_FILE="${VPN_PID_FILE:-/tmp/datatims-openconnect.pid}"
 WAIT_TIMEOUT_SECONDS="${WAIT_TIMEOUT_SECONDS:-45}"
 LOG_FILE="${LOG_FILE:-$ROOT_DIR/logs/sync-supabase.log}"
+DRY_RUN_VALUE="${DRY_RUN:-false}"
 
 load_env_file() {
   local file="$1"
@@ -83,6 +84,7 @@ exec > >(tee -a "$LOG_FILE") 2>&1
 echo "[$(date '+%Y-%m-%d %H:%M:%S')] sync-supabase starting"
 echo "Using env file: $ENV_FILE"
 echo "Logging to: $LOG_FILE"
+echo "Dry run: $DRY_RUN_VALUE"
 
 VPN_HOST_VALUE="$(pick_first "${VPN_HOST:-}" "${vpn_host:-}")"
 VPN_USERNAME_VALUE="$(pick_first "${VPN_USERNAME:-}" "${vpn_username:-}")"
@@ -131,5 +133,5 @@ if ! wait_for_port "$DB_HOST_VALUE" "$DB_PORT_VALUE" "$WAIT_TIMEOUT_SECONDS"; th
 fi
 
 cd "$ROOT_DIR"
-node "$ROOT_DIR/scripts/sync-supabase.js"
+DRY_RUN="$DRY_RUN_VALUE" node "$ROOT_DIR/scripts/sync-supabase.js"
 echo "[$(date '+%Y-%m-%d %H:%M:%S')] sync-supabase completed"

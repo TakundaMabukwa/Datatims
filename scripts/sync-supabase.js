@@ -7,6 +7,7 @@ const {
 const { getSupabaseClient } = require('../config/supabase');
 
 const BATCH_SIZE = parseInt(process.env.SUPABASE_BATCH_SIZE || '500', 10);
+const DRY_RUN = /^(1|true|yes)$/i.test(process.env.DRY_RUN || 'false');
 
 function chunk(array, size) {
   const chunks = [];
@@ -343,6 +344,8 @@ async function fetchExistingRows(supabase, table, keyColumn, keys) {
 async function upsertBatch(supabase, table, rows, conflictColumn) {
   if (!rows.length) return;
 
+  if (DRY_RUN) return;
+
   const { error } = await supabase
     .from(table)
     .upsert(rows, { onConflict: conflictColumn });
@@ -369,6 +372,8 @@ async function syncTable({ supabase, table, sourceRows, mapRow, conflictColumn, 
   );
 
   const toUpsert = [];
+  const insertedKeys = [];
+  const updatedKeys = [];
   let inserted = 0;
   let updated = 0;
 
@@ -379,6 +384,7 @@ async function syncTable({ supabase, table, sourceRows, mapRow, conflictColumn, 
     if (!existing) {
       inserted += 1;
       toUpsert.push(row);
+      insertedKeys.push(key);
       continue;
     }
 
@@ -389,6 +395,7 @@ async function syncTable({ supabase, table, sourceRows, mapRow, conflictColumn, 
     if (changed) {
       updated += 1;
       toUpsert.push(row);
+      updatedKeys.push(key);
     }
   }
 
@@ -398,12 +405,15 @@ async function syncTable({ supabase, table, sourceRows, mapRow, conflictColumn, 
 
   return {
     label,
+    conflictColumn,
     sourceCount: sourceRows.length,
     comparableCount: mappedRows.length,
     existingCount: existingRows.length,
     inserted,
     updated,
-    unchanged: mappedRows.length - inserted - updated
+    unchanged: mappedRows.length - inserted - updated,
+    insertedKeys,
+    updatedKeys
   };
 }
 
@@ -440,6 +450,8 @@ async function syncDriversTable({ supabase, sourceRows }) {
   }
 
   const toUpsert = [];
+  const insertedKeys = [];
+  const updatedKeys = [];
   let inserted = 0;
   let updated = 0;
 
@@ -450,6 +462,7 @@ async function syncDriversTable({ supabase, sourceRows }) {
     if (!existing) {
       inserted += 1;
       toUpsert.push(row);
+      insertedKeys.push(canonicalKey);
       continue;
     }
 
@@ -461,6 +474,7 @@ async function syncDriversTable({ supabase, sourceRows }) {
     if (changed || existing.driver_code !== canonicalKey) {
       updated += 1;
       toUpsert.push(row);
+      updatedKeys.push(canonicalKey);
     }
   }
 
@@ -470,17 +484,26 @@ async function syncDriversTable({ supabase, sourceRows }) {
 
   return {
     label: 'drivers',
+    conflictColumn: 'driver_code',
     sourceCount: sourceRows.length,
     comparableCount: mappedRows.length,
     existingCount: existingRows.length,
     inserted,
     updated,
-    unchanged: mappedRows.length - inserted - updated
+    unchanged: mappedRows.length - inserted - updated,
+    insertedKeys,
+    updatedKeys
   };
 }
 
+function printSample(label, action, keys) {
+  if (!keys.length) return;
+  const sample = keys.slice(0, 20).join(', ');
+  console.log(`[SYNC:${label}] ${action} keys sample (${Math.min(keys.length, 20)}/${keys.length}): ${sample}`);
+}
+
 async function run() {
-  console.log('=== Datatims -> Supabase Sync ===\n');
+  console.log(`=== Datatims -> Supabase Sync${DRY_RUN ? ' (Dry Run)' : ''} ===\n`);
   const supabase = getSupabaseClient();
 
   const [clientRows, driverRows, vehicleRows] = await Promise.all([
@@ -517,9 +540,11 @@ async function run() {
     console.log(
       `[SYNC:${result.label}] source=${result.sourceCount} comparable=${result.comparableCount} existing=${result.existingCount} inserted=${result.inserted} updated=${result.updated} unchanged=${result.unchanged}`
     );
+    printSample(result.label, 'insert', result.insertedKeys);
+    printSample(result.label, 'update', result.updatedKeys);
   }
 
-  console.log('\nSupabase sync complete');
+  console.log(`\nSupabase sync ${DRY_RUN ? 'dry run ' : ''}complete`);
 }
 
 run()

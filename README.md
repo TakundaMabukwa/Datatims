@@ -67,10 +67,22 @@ Commands:
 npm run sync:supabase
 ```
 
+Dry run without writing to Supabase:
+
+```bash
+npm run sync:supabase:dry
+```
+
 If the DB is only reachable over VPN on the droplet:
 
 ```bash
 npm run sync:supabase:live
+```
+
+Dry run over VPN on the droplet:
+
+```bash
+npm run sync:supabase:live:dry
 ```
 
 Required env:
@@ -88,3 +100,4 @@ Sync behavior:
 - insert when Datatims row is missing in Supabase
 - update when Datatims row differs from Supabase
 - leave unmatched Supabase rows untouched
+- dry run prints counts and sample keys for inserts and updates without writing anything
