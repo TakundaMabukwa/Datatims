@@ -6,6 +6,10 @@
   "scripts": {
     "start": "node index.js",
     "pull:live": "bash ./scripts/pull-live.sh",
+    "sync:client": "node scripts/sync-single-client.js",
+    "sync:client:dry": "node -e \"process.env.DRY_RUN='true'; require('./scripts/sync-single-client.js')\"",
+    "sync:client:live": "bash ./scripts/sync-single-client-live.sh",
+    "sync:client:live:dry": "bash -c 'DRY_RUN=true ./scripts/sync-single-client-live.sh'",
     "sync:supabase": "node scripts/sync-supabase.js",
     "sync:supabase:dry": "node -e \"process.env.DRY_RUN='true'; require('./scripts/sync-supabase.js')\"",
     "sync:supabase:live": "bash ./scripts/sync-supabase-live.sh",
