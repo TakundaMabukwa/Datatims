@@ -5,6 +5,7 @@ ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 ENV_FILE="${ENV_FILE:-$ROOT_DIR/.env}"
 VPN_PID_FILE="${VPN_PID_FILE:-/tmp/datatims-openconnect.pid}"
 WAIT_TIMEOUT_SECONDS="${WAIT_TIMEOUT_SECONDS:-45}"
+LOG_FILE="${LOG_FILE:-$ROOT_DIR/logs/pull-live.log}"
 VIEW_NAME="${1:-${DB_VIEW:-epssched.vsl_drmaster}}"
 ROW_LIMIT="${2:-${DB_LIMIT:-10}}"
 
@@ -26,6 +27,16 @@ pick_first() {
     fi
   done
   return 1
+}
+
+pick_optional() {
+  for value in "$@"; do
+    if [[ -n "${value:-}" ]]; then
+      printf '%s' "$value"
+      return 0
+    fi
+  done
+  printf '%s' ''
 }
 
 wait_for_port() {
@@ -68,10 +79,17 @@ run_with_sudo() {
 
 load_env_file "$ENV_FILE"
 
+mkdir -p "$(dirname "$LOG_FILE")"
+exec > >(tee -a "$LOG_FILE") 2>&1
+
+echo "[$(date '+%Y-%m-%d %H:%M:%S')] pull-live starting"
+echo "Using env file: $ENV_FILE"
+echo "Logging to: $LOG_FILE"
+
 VPN_HOST_VALUE="$(pick_first "${VPN_HOST:-}" "${vpn_host:-}")"
 VPN_USERNAME_VALUE="$(pick_first "${VPN_USERNAME:-}" "${vpn_username:-}")"
 VPN_PASSWORD_VALUE="$(pick_first "${VPN_PASSWORD:-}" "${vpn_password:-}")"
-SUDO_PASSWORD_VALUE="$(pick_first "${SUDO_PASSWORD:-}" "${sudo_password:-}" "")"
+SUDO_PASSWORD_VALUE="$(pick_optional "${SUDO_PASSWORD:-}" "${sudo_password:-}")"
 DB_HOST_VALUE="$(pick_first "${DB_HOST:-}" "")"
 DB_PORT_VALUE="$(pick_first "${DB_PORT:-}" "3357")"
 OPENCONNECT_BIN="${OPENCONNECT_BIN:-openconnect}"
@@ -137,3 +155,4 @@ fi
 echo "DB is reachable, fetching $VIEW_NAME (limit $ROW_LIMIT)"
 cd "$ROOT_DIR"
 node "$ROOT_DIR/scripts/fetch-view.js" "$VIEW_NAME" "$ROW_LIMIT"
+echo "[$(date '+%Y-%m-%d %H:%M:%S')] pull-live completed"
