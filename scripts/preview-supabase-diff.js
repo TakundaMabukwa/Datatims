@@ -43,6 +43,11 @@ function joinParts(parts) {
   return filtered.length ? filtered.join(', ') : null;
 }
 
+function joinPartsNoComma(parts) {
+  const filtered = parts.map(normalizeText).filter(Boolean);
+  return filtered.length ? filtered.join(' ') : null;
+}
+
 function cleanPhone(value) {
   const text = normalizeText(value);
   return text ? text.replace(/^(G\+|OPN\+)/i, '+') : null;
@@ -72,22 +77,29 @@ function parseDriverName(fullName, explicitSurname) {
 }
 
 function mapClient(row) {
+  const deliveryAddress = joinParts([row.DrDeliver1, row.DrDeliver2, row.DrDeliver3]);
+  const postalAddress = joinParts([row.DrAddressline1, row.DrAddressline2, row.DrAddressline3]);
+  const compactDeliveryAddress = joinPartsNoComma([row.DrDeliver1, row.DrDeliver2, row.DrDeliver3]);
+  const compactPostalAddress = joinPartsNoComma([row.DrAddressline1, row.DrAddressline2, row.DrAddressline3]);
+  const primaryAddress = deliveryAddress || postalAddress;
+  const compactPrimaryAddress = compactDeliveryAddress || compactPostalAddress || '';
+
   return {
     client_id: normalizeText(row.DrNumber),
     type: 'client',
     name: normalizeText(row.DrName),
-    address: joinParts([row.DrAddressline1, row.DrAddressline2, row.DrAddressline3]),
-    street: normalizeText(row.DrDeliver1),
-    city: normalizeText(row.DrDeliver2),
-    state: normalizeText(row.DrRegion),
-    postal_code: normalizeText(row.DrDeliver3 || row.DrAddressline3) || '',
+    address: primaryAddress || '',
+    street: '',
+    city: '',
+    state: '',
+    postal_code: compactPrimaryAddress,
     contact_person: normalizeText(row.DrContactName),
-    contact_phone: cleanPhone(row.DrCellNo || row.DrTelephoneOps || row.DrTelephone),
+    contact_phone: cleanPhone(row.DrCellNo || row.DrTelephoneOps),
     contact_email: normalizeText(row.DrEmail || row.DrOpsEmail),
-    email: normalizeText(row.DrEmail || row.DrEmailStatement) || '',
+    email: '',
     phone: cleanPhone(row.DrTelephone) || '',
     fax_number: normalizeText(row.DrFax || row.DrFaxOPS) || '',
-    industry: normalizeText(row.DrAnalysis) || '',
+    industry: '',
     vat_number: normalizeText(row.DrVatNumber) || '',
     status: normalizeBool(row.DrDormantFlag) ? 'Dormant' : 'Active',
     credit_limit: normalizeNumber(row.DrCreditLimit) || 0,
