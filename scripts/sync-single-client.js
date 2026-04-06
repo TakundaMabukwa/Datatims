@@ -109,15 +109,31 @@ async function run() {
   }
 
   const supabase = getSupabaseClient();
-  const { error } = await supabase
+  const { data: existingRows, error: existingError } = await supabase
     .from('eps_client_list')
-    .upsert([mapped], { onConflict: 'client_id' });
+    .select('id, client_id')
+    .eq('client_id', mapped.client_id)
+    .limit(1);
 
-  if (error) {
-    throw new Error(`Supabase upsert failed: ${error.message}`);
+  if (existingError) {
+    throw new Error(`Supabase lookup failed: ${existingError.message}`);
   }
 
-  console.log('\nSupabase upsert complete');
+  if (!existingRows || !existingRows.length) {
+    console.log('\nNo matching Supabase client row found. Skipping update.');
+    return;
+  }
+
+  const { error } = await supabase
+    .from('eps_client_list')
+    .update(mapped)
+    .eq('client_id', mapped.client_id);
+
+  if (error) {
+    throw new Error(`Supabase update failed: ${error.message}`);
+  }
+
+  console.log('\nSupabase update complete');
 }
 
 run()

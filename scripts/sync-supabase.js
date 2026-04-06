@@ -367,6 +367,22 @@ async function upsertBatch(supabase, table, rows, conflictColumn) {
   }
 }
 
+async function updateExistingBatch(supabase, table, rows, keyColumn) {
+  if (!rows.length || DRY_RUN) return;
+
+  for (const row of rows) {
+    const keyValue = row[keyColumn];
+    const { error } = await supabase
+      .from(table)
+      .update(row)
+      .eq(keyColumn, keyValue);
+
+    if (error) {
+      throw new Error(`Supabase update failed for ${table}(${keyValue}): ${error.message}`);
+    }
+  }
+}
+
 async function syncTable({ supabase, table, sourceRows, mapRow, conflictColumn, label }) {
   const mappedRows = sourceRows
     .map(mapRow)
@@ -426,6 +442,66 @@ async function syncTable({ supabase, table, sourceRows, mapRow, conflictColumn, 
     unchanged: mappedRows.length - inserted - updated,
     insertedKeys,
     updatedKeys
+  };
+}
+
+async function syncClientsTable({ supabase, sourceRows }) {
+  const mappedRows = sourceRows
+    .map(mapClient)
+    .filter(row => normalizeText(row.client_id));
+
+  const existingRows = await fetchExistingRows(
+    supabase,
+    'eps_client_list',
+    'client_id',
+    mappedRows.map(row => row.client_id)
+  );
+
+  const existingMap = new Map(
+    existingRows.map(row => [normalizeText(row.client_id), row])
+  );
+
+  const toUpdate = [];
+  const updatedKeys = [];
+  const skippedInsertKeys = [];
+  let updated = 0;
+
+  for (const row of mappedRows) {
+    const key = normalizeText(row.client_id);
+    const existing = existingMap.get(key);
+
+    if (!existing) {
+      skippedInsertKeys.push(key);
+      continue;
+    }
+
+    const changed = Object.keys(row)
+      .filter(column => column !== 'updated_at')
+      .some(column => !valuesEqual(row[column], existing[column]));
+
+    if (changed) {
+      updated += 1;
+      toUpdate.push(row);
+      updatedKeys.push(key);
+    }
+  }
+
+  for (const rowChunk of chunk(toUpdate, BATCH_SIZE)) {
+    await updateExistingBatch(supabase, 'eps_client_list', rowChunk, 'client_id');
+  }
+
+  return {
+    label: 'clients',
+    conflictColumn: 'client_id',
+    sourceCount: sourceRows.length,
+    comparableCount: mappedRows.length,
+    existingCount: existingRows.length,
+    inserted: 0,
+    updated,
+    unchanged: mappedRows.length - updated - skippedInsertKeys.length,
+    insertedKeys: [],
+    updatedKeys,
+    skippedInsertKeys
   };
 }
 
@@ -525,13 +601,9 @@ async function run() {
   ]);
 
   const results = [];
-  results.push(await syncTable({
+  results.push(await syncClientsTable({
     supabase,
-    table: 'eps_client_list',
-    sourceRows: clientRows,
-    mapRow: mapClient,
-    conflictColumn: 'client_id',
-    label: 'clients'
+    sourceRows: clientRows
   }));
 
   results.push(await syncDriversTable({
@@ -554,6 +626,7 @@ async function run() {
     );
     printSample(result.label, 'insert', result.insertedKeys);
     printSample(result.label, 'update', result.updatedKeys);
+    printSample(result.label, 'skipped missing in Supabase', result.skippedInsertKeys || []);
   }
 
   console.log(`\nSupabase sync ${DRY_RUN ? 'dry run ' : ''}complete`);
