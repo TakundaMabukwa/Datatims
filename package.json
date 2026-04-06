@@ -10,6 +10,8 @@
     "sync:supabase:dry": "node -e \"process.env.DRY_RUN='true'; require('./scripts/sync-supabase.js')\"",
     "sync:supabase:live": "bash ./scripts/sync-supabase-live.sh",
     "sync:supabase:live:dry": "bash -c 'DRY_RUN=true ./scripts/sync-supabase-live.sh'",
+    "sync:supabase:preview": "node scripts/preview-supabase-diff.js",
+    "sync:supabase:preview:all": "node scripts/preview-supabase-diff-all.js",
     "vpn:connect": "node scripts/vpn-connect.js",
     "vpn:disconnect": "node scripts/vpn-disconnect.js",
     "vpn:connect:bash": "scripts\\connect-vpn.cmd",
