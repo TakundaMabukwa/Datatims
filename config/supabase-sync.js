@@ -1,5 +1,6 @@
 const { getDrivers, getDriverMaster, getVehicles } = require('./db');
 const { getSupabaseClient } = require('./supabase');
+const { connectVpn, getVpnConfig } = require('./vpn');
 
 const BATCH_SIZE = parseInt(process.env.SUPABASE_BATCH_SIZE || '500', 10);
 
@@ -343,11 +344,40 @@ async function upsertBatch(supabase, table, rows, conflictColumn, dryRun) {
 
   const { error } = await supabase
     .from(table)
-    .upsert(rows, { onConflict: conflictColumn });
+    .upsert(rows, {
+      onConflict: conflictColumn,
+      defaultToNull: false
+    });
 
   if (error) {
+    if (/no unique or exclusion constraint matching the ON CONFLICT specification/i.test(error.message || '')) {
+      throw new Error(
+        `Supabase upsert failed for ${table}: ${error.message}. ` +
+        `Create a unique index for ${table}.${conflictColumn} first (see scripts/supabase-indexes.sql).`
+      );
+    }
     throw new Error(`Supabase upsert failed for ${table}: ${error.message}`);
   }
+}
+
+function maybeAddVpnHint(err) {
+  const message = String(err?.message || '');
+  const isConnectivityFailure = /ETIMEDOUT|ECONNREFUSED|EHOSTUNREACH|ENETUNREACH/i.test(message);
+  if (!isConnectivityFailure) return err;
+
+  const vpn = getVpnConfig();
+  const hasVpnCredentials = Boolean(vpn.host && vpn.username && vpn.password);
+
+  if (!vpn.required && hasVpnCredentials) {
+    const hinted = new Error(
+      `${message}. Source DB is unreachable and VPN is disabled. ` +
+      `Set VPN_REQUIRED=true (or vpn_required=true), then retry.`
+    );
+    hinted.code = err?.code;
+    return hinted;
+  }
+
+  return err;
 }
 
 async function updateExistingBatch(supabase, table, rows, keyColumn, dryRun) {
@@ -560,6 +590,8 @@ async function runSupabaseSync({ dryRun = false } = {}) {
 
   syncInProgress = true;
   try {
+    await connectVpn();
+
     const supabase = getSupabaseClient();
     const [clientRows, driverRows, vehicleRows] = await Promise.all([
       getDrivers(),
@@ -585,6 +617,8 @@ async function runSupabaseSync({ dryRun = false } = {}) {
       timestamp: new Date().toISOString(),
       results
     };
+  } catch (err) {
+    throw maybeAddVpnHint(err);
   } finally {
     syncInProgress = false;
   }

@@ -15,7 +15,7 @@ This repo connects directly to MySQL, so if the database only exists behind the 
 4. Run `npm start` or any DB test script. The sync service now calls the VPN helper first and waits for `DB_HOST:DB_PORT` to become reachable.
 
 Notes:
-- The helper also supports the repo's existing lowercase keys: `vpn_host`, `vpn_username`, `vpn_password`.
+- The helper also supports the repo's existing lowercase keys: `vpn_required`, `vpn_host`, `vpn_username`, `vpn_password`, `vpn_cli_path`.
 - If `VPN_REQUIRED` is not `true`, the app behaves exactly like before.
 - If your Cisco gateway uses MFA or extra prompts beyond username/password/banner accept, the helper may need one more prompt handler.
 
@@ -66,6 +66,8 @@ Commands:
 ```bash
 npm run sync:supabase
 ```
+
+This command now attempts VPN connection first when `VPN_REQUIRED=true` (or `vpn_required=true`).
 
 Dry run without writing to Supabase:
 

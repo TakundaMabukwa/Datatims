@@ -1,6 +1,5 @@
 const express = require('express');
 const syncService = require('../config/sync');
-const { connectVpn } = require('../config/vpn');
 const { runSupabaseSync } = require('../config/supabase-sync');
 
 const router = express.Router();
@@ -143,7 +142,6 @@ router.post('/sync-supabase', async (req, res, next) => {
     const dryRun = /^(1|true|yes)$/i.test(String(req.body?.dryRun || 'false'));
     console.log(`[API] Supabase sync triggered${dryRun ? ' (dry run)' : ''}`);
 
-    await connectVpn();
     const summary = await runSupabaseSync({ dryRun });
 
     res.json({

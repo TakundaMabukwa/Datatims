@@ -8,11 +8,11 @@ function env(name, fallback = '') {
 }
 
 function getVpnConfig() {
-  const required = /^(1|true|yes)$/i.test(env('VPN_REQUIRED', 'false'));
+  const required = /^(1|true|yes)$/i.test(env('VPN_REQUIRED', env('vpn_required', 'false')));
   const host = env('VPN_HOST') || env('vpn_host');
   const username = env('VPN_USERNAME') || env('vpn_username');
   const password = env('VPN_PASSWORD') || env('vpn_password');
-  const cliPath = env('VPN_CLI_PATH');
+  const cliPath = env('VPN_CLI_PATH') || env('vpn_cli_path');
   const connectTimeoutMs = parseInt(env('VPN_CONNECT_TIMEOUT_MS', '120000'), 10);
   const settleTimeoutMs = parseInt(env('VPN_SETTLE_TIMEOUT_MS', '30000'), 10);
   const promptTimeoutMs = parseInt(env('VPN_PROMPT_TIMEOUT_MS', '15000'), 10);
@@ -151,6 +151,13 @@ function runCliCommand(executable, args, { timeoutMs = 15000, stdinLines = [] } 
 async function connectVpn(config = getVpnConfig()) {
   if (!config.required) {
     return { skipped: true, reason: 'VPN_REQUIRED is disabled' };
+  }
+
+  if (config.dbHost && config.dbPort) {
+    const alreadyReachable = await checkPort(config.dbHost, config.dbPort);
+    if (alreadyReachable) {
+      return { connected: true, reused: true, reason: 'DB host already reachable' };
+    }
   }
 
   if (!config.host) {
