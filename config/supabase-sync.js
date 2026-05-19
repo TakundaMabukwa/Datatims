@@ -410,6 +410,23 @@ async function updateExistingBatch(supabase, table, rows, keyColumn, dryRun) {
   }
 }
 
+async function updateByMatchBatch(supabase, table, rows, keyColumn, dryRun) {
+  if (!rows.length || dryRun) return;
+
+  for (const item of rows) {
+    const matchValue = item?.matchValue;
+    const row = item?.row;
+    const { error } = await supabase
+      .from(table)
+      .update(row)
+      .eq(keyColumn, matchValue);
+
+    if (error) {
+      throw new Error(`Supabase update failed for ${table}(${matchValue}): ${error.message}`);
+    }
+  }
+}
+
 async function syncClientsTable({ supabase, sourceRows, dryRun }) {
   const mappedRows = sourceRows
     .map(mapClient)
@@ -499,7 +516,8 @@ async function syncDriversTable({ supabase, sourceRows, dryRun }) {
     }
   }
 
-  const toUpsert = [];
+  const toInsert = [];
+  const toUpdate = [];
   const insertedKeys = [];
   const updatedKeys = [];
   let inserted = 0;
@@ -511,7 +529,7 @@ async function syncDriversTable({ supabase, sourceRows, dryRun }) {
 
     if (!existing) {
       inserted += 1;
-      toUpsert.push(row);
+      toInsert.push(row);
       insertedKeys.push(canonicalKey);
       continue;
     }
@@ -523,13 +541,20 @@ async function syncDriversTable({ supabase, sourceRows, dryRun }) {
 
     if (changed || existing.driver_code !== canonicalKey) {
       updated += 1;
-      toUpsert.push(row);
+      toUpdate.push({
+        matchValue: existing.driver_code,
+        row
+      });
       updatedKeys.push(canonicalKey);
     }
   }
 
-  for (const rowChunk of chunk(toUpsert, BATCH_SIZE)) {
-    await upsertBatch(supabase, 'drivers', rowChunk, 'driver_code', dryRun);
+  for (const rowChunk of chunk(toUpdate, BATCH_SIZE)) {
+    await updateByMatchBatch(supabase, 'drivers', rowChunk, 'driver_code', dryRun);
+  }
+
+  for (const rowChunk of chunk(toInsert, BATCH_SIZE)) {
+    await insertBatch(supabase, 'drivers', rowChunk, dryRun);
   }
 
   return {
@@ -558,7 +583,8 @@ async function syncTable({ supabase, table, sourceRows, mapRow, conflictColumn, 
   );
 
   const existingMap = new Map(existingRows.map(row => [normalizeText(row[conflictColumn]), row]));
-  const toUpsert = [];
+  const toInsert = [];
+  const toUpdate = [];
   const insertedKeys = [];
   const updatedKeys = [];
   let inserted = 0;
@@ -570,7 +596,7 @@ async function syncTable({ supabase, table, sourceRows, mapRow, conflictColumn, 
 
     if (!existing) {
       inserted += 1;
-      toUpsert.push(row);
+      toInsert.push(row);
       insertedKeys.push(key);
       continue;
     }
@@ -581,13 +607,17 @@ async function syncTable({ supabase, table, sourceRows, mapRow, conflictColumn, 
 
     if (changed) {
       updated += 1;
-      toUpsert.push(row);
+      toUpdate.push(row);
       updatedKeys.push(key);
     }
   }
 
-  for (const rowChunk of chunk(toUpsert, BATCH_SIZE)) {
-    await upsertBatch(supabase, table, rowChunk, conflictColumn, dryRun);
+  for (const rowChunk of chunk(toUpdate, BATCH_SIZE)) {
+    await updateExistingBatch(supabase, table, rowChunk, conflictColumn, dryRun);
+  }
+
+  for (const rowChunk of chunk(toInsert, BATCH_SIZE)) {
+    await insertBatch(supabase, table, rowChunk, dryRun);
   }
 
   return {
