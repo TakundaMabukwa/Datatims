@@ -409,9 +409,10 @@ async function syncClientsTable({ supabase, sourceRows, dryRun }) {
   );
 
   const existingMap = new Map(existingRows.map(row => [normalizeText(row.client_id), row]));
-  const toUpdate = [];
+  const toUpsert = [];
+  const insertedKeys = [];
   const updatedKeys = [];
-  const skippedInsertKeys = [];
+  let inserted = 0;
   let updated = 0;
 
   for (const row of mappedRows) {
@@ -419,7 +420,9 @@ async function syncClientsTable({ supabase, sourceRows, dryRun }) {
     const existing = existingMap.get(key);
 
     if (!existing) {
-      skippedInsertKeys.push(key);
+      inserted += 1;
+      toUpsert.push(row);
+      insertedKeys.push(key);
       continue;
     }
 
@@ -429,13 +432,13 @@ async function syncClientsTable({ supabase, sourceRows, dryRun }) {
 
     if (changed) {
       updated += 1;
-      toUpdate.push(row);
+      toUpsert.push(row);
       updatedKeys.push(key);
     }
   }
 
-  for (const rowChunk of chunk(toUpdate, BATCH_SIZE)) {
-    await updateExistingBatch(supabase, 'eps_client_list', rowChunk, 'client_id', dryRun);
+  for (const rowChunk of chunk(toUpsert, BATCH_SIZE)) {
+    await upsertBatch(supabase, 'eps_client_list', rowChunk, 'client_id', dryRun);
   }
 
   return {
@@ -443,12 +446,12 @@ async function syncClientsTable({ supabase, sourceRows, dryRun }) {
     sourceCount: sourceRows.length,
     comparableCount: mappedRows.length,
     existingCount: existingRows.length,
-    inserted: 0,
+    inserted,
     updated,
-    unchanged: mappedRows.length - updated - skippedInsertKeys.length,
-    insertedKeys: [],
+    unchanged: mappedRows.length - inserted - updated,
+    insertedKeys,
     updatedKeys,
-    skippedInsertKeys
+    skippedInsertKeys: []
   };
 }
 
