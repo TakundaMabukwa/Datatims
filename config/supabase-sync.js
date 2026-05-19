@@ -360,6 +360,20 @@ async function upsertBatch(supabase, table, rows, conflictColumn, dryRun) {
   }
 }
 
+async function insertBatch(supabase, table, rows, dryRun) {
+  if (!rows.length || dryRun) return;
+
+  const { error } = await supabase
+    .from(table)
+    .insert(rows, {
+      defaultToNull: false
+    });
+
+  if (error) {
+    throw new Error(`Supabase insert failed for ${table}: ${error.message}`);
+  }
+}
+
 function maybeAddVpnHint(err) {
   const message = String(err?.message || '');
   const isConnectivityFailure = /ETIMEDOUT|ECONNREFUSED|EHOSTUNREACH|ENETUNREACH/i.test(message);
@@ -409,7 +423,8 @@ async function syncClientsTable({ supabase, sourceRows, dryRun }) {
   );
 
   const existingMap = new Map(existingRows.map(row => [normalizeText(row.client_id), row]));
-  const toUpsert = [];
+  const toInsert = [];
+  const toUpdate = [];
   const insertedKeys = [];
   const updatedKeys = [];
   let inserted = 0;
@@ -421,7 +436,7 @@ async function syncClientsTable({ supabase, sourceRows, dryRun }) {
 
     if (!existing) {
       inserted += 1;
-      toUpsert.push(row);
+      toInsert.push(row);
       insertedKeys.push(key);
       continue;
     }
@@ -432,13 +447,17 @@ async function syncClientsTable({ supabase, sourceRows, dryRun }) {
 
     if (changed) {
       updated += 1;
-      toUpsert.push(row);
+      toUpdate.push(row);
       updatedKeys.push(key);
     }
   }
 
-  for (const rowChunk of chunk(toUpsert, BATCH_SIZE)) {
-    await upsertBatch(supabase, 'eps_client_list', rowChunk, 'client_id', dryRun);
+  for (const rowChunk of chunk(toUpdate, BATCH_SIZE)) {
+    await updateExistingBatch(supabase, 'eps_client_list', rowChunk, 'client_id', dryRun);
+  }
+
+  for (const rowChunk of chunk(toInsert, BATCH_SIZE)) {
+    await insertBatch(supabase, 'eps_client_list', rowChunk, dryRun);
   }
 
   return {
