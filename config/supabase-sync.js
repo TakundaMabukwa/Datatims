@@ -605,11 +605,33 @@ async function syncDriversTable({ supabase, sourceRows, dryRun }) {
     throw new Error(`Supabase select failed for drivers: ${fetchError.message}`);
   }
 
-  const toDelete = [];
+  let toDelete = [];
   for (const row of (allSupabaseDrivers || [])) {
     const canonical = normalizeDriverCode(row.driver_code);
     if (canonical && !sourceKeySet.has(canonical)) {
       toDelete.push(row.driver_code);
+    }
+  }
+
+  if (toDelete.length) {
+    const { data: referencedVehicles, error: vehError } = await supabase
+      .from('vehiclesc')
+      .select('driver_code')
+      .in('driver_code', toDelete);
+
+    if (vehError) {
+      throw new Error(`Supabase select failed for vehiclesc: ${vehError.message}`);
+    }
+
+    const referencedDriverCodes = new Set(
+      (referencedVehicles || []).map(r => normalizeText(r.driver_code)).filter(Boolean)
+    );
+
+    const skippedDueToRefs = toDelete.filter(code => referencedDriverCodes.has(normalizeText(code)));
+    toDelete = toDelete.filter(code => !referencedDriverCodes.has(normalizeText(code)));
+
+    if (skippedDueToRefs.length) {
+      console.log(`[SYNC:drivers] skipped ${skippedDueToRefs.length} driver(s) still referenced by vehicles: ${skippedDueToRefs.slice(0, 10).join(', ')}${skippedDueToRefs.length > 10 ? '...' : ''}`);
     }
   }
 
