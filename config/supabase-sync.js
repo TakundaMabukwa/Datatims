@@ -492,28 +492,6 @@ async function syncClientsTable({ supabase, sourceRows, dryRun }) {
     await insertBatch(supabase, 'eps_client_list', rowChunk, dryRun);
   }
 
-  const clientSourceKeySet = new Set(mappedRows.map(row => normalizeText(row.client_id)));
-
-  const { data: allSupabaseClients, error: clientFetchError } = await supabase
-    .from('eps_client_list')
-    .select('client_id');
-
-  if (clientFetchError) {
-    throw new Error(`Supabase select failed for eps_client_list: ${clientFetchError.message}`);
-  }
-
-  const clientsToDelete = [];
-  for (const row of (allSupabaseClients || [])) {
-    const key = normalizeText(row.client_id);
-    if (key && !clientSourceKeySet.has(key)) {
-      clientsToDelete.push(row.client_id);
-    }
-  }
-
-  for (const keyChunk of chunk(clientsToDelete, BATCH_SIZE)) {
-    await deleteBatch(supabase, 'eps_client_list', 'client_id', keyChunk, dryRun);
-  }
-
   return {
     label: 'clients',
     sourceCount: sourceRows.length,
@@ -521,7 +499,6 @@ async function syncClientsTable({ supabase, sourceRows, dryRun }) {
     existingCount: existingRows.length,
     inserted,
     updated,
-    deleted: clientsToDelete.length,
     unchanged: mappedRows.length - inserted - updated,
     insertedKeys,
     updatedKeys,
@@ -616,19 +593,19 @@ async function syncDriversTable({ supabase, sourceRows, dryRun }) {
   if (toDelete.length) {
     const { data: referencedVehicles, error: vehError } = await supabase
       .from('vehiclesc')
-      .select('driver_code')
-      .in('driver_code', toDelete);
+      .select('driver_id')
+      .in('driver_id', toDelete);
 
     if (vehError) {
       throw new Error(`Supabase select failed for vehiclesc: ${vehError.message}`);
     }
 
-    const referencedDriverCodes = new Set(
-      (referencedVehicles || []).map(r => normalizeText(r.driver_code)).filter(Boolean)
+    const referencedDriverIds = new Set(
+      (referencedVehicles || []).map(r => normalizeText(r.driver_id)).filter(Boolean)
     );
 
-    const skippedDueToRefs = toDelete.filter(code => referencedDriverCodes.has(normalizeText(code)));
-    toDelete = toDelete.filter(code => !referencedDriverCodes.has(normalizeText(code)));
+    const skippedDueToRefs = toDelete.filter(code => referencedDriverIds.has(normalizeText(code)));
+    toDelete = toDelete.filter(code => !referencedDriverIds.has(normalizeText(code)));
 
     if (skippedDueToRefs.length) {
       console.log(`[SYNC:drivers] skipped ${skippedDueToRefs.length} driver(s) still referenced by vehicles: ${skippedDueToRefs.slice(0, 10).join(', ')}${skippedDueToRefs.length > 10 ? '...' : ''}`);
@@ -704,28 +681,6 @@ async function syncTable({ supabase, table, sourceRows, mapRow, conflictColumn, 
     await insertBatch(supabase, table, rowChunk, dryRun);
   }
 
-  const tableSourceKeySet = new Set(mappedRows.map(row => normalizeText(row[conflictColumn])));
-
-  const { data: allSupabaseRows, error: fetchError } = await supabase
-    .from(table)
-    .select(conflictColumn);
-
-  if (fetchError) {
-    throw new Error(`Supabase select failed for ${table}: ${fetchError.message}`);
-  }
-
-  const toDelete = [];
-  for (const row of (allSupabaseRows || [])) {
-    const key = normalizeText(row[conflictColumn]);
-    if (key && !tableSourceKeySet.has(key)) {
-      toDelete.push(row[conflictColumn]);
-    }
-  }
-
-  for (const keyChunk of chunk(toDelete, BATCH_SIZE)) {
-    await deleteBatch(supabase, table, conflictColumn, keyChunk, dryRun);
-  }
-
   return {
     label,
     sourceCount: sourceRows.length,
@@ -733,11 +688,9 @@ async function syncTable({ supabase, table, sourceRows, mapRow, conflictColumn, 
     existingCount: existingRows.length,
     inserted,
     updated,
-    deleted: toDelete.length,
     unchanged: mappedRows.length - inserted - updated,
     insertedKeys,
-    updatedKeys,
-    deletedKeys: toDelete
+    updatedKeys
   };
 }
 
