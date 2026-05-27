@@ -742,5 +742,18 @@ async function runSupabaseSync({ dryRun = false } = {}) {
 }
 
 module.exports = {
-  runSupabaseSync
+  runSupabaseSync,
+  normalizeText,
+  normalizeDriverCode,
+  normalizeNumber,
+  normalizeBool,
+  normalizeDate,
+  cleanPhone,
+  joinParts,
+  joinPartsNoComma,
+  parseDriverName,
+  valuesEqual,
+  mapClient,
+  mapDriver,
+  mapVehicle
 };

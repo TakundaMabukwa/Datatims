@@ -1,168 +1,11 @@
 require('dotenv').config();
 const { getDrivers, getDriverMaster, getVehicles } = require('../config/db');
 const { getSupabaseClient } = require('../config/supabase');
-
-function normalizeText(value) {
-  if (value === undefined || value === null) return null;
-  const trimmed = String(value).trim();
-  return trimmed === '' ? null : trimmed;
-}
-
-function normalizeDriverCode(value) {
-  const text = normalizeText(value);
-  if (!text) return null;
-  return text.toUpperCase().startsWith('EPS') ? text.toUpperCase() : `EPS${text.toUpperCase()}`;
-}
-
-function normalizeNumber(value) {
-  if (value === undefined || value === null || value === '') return null;
-  const num = Number(value);
-  return Number.isFinite(num) ? num : null;
-}
-
-function normalizeBool(value) {
-  if (value === undefined || value === null || value === '') return null;
-  if (typeof value === 'boolean') return value;
-  const normalized = String(value).trim().toUpperCase();
-  if (['Y', 'YES', 'TRUE', '1', 'C'].includes(normalized)) return true;
-  if (['N', 'NO', 'FALSE', '0'].includes(normalized)) return false;
-  return null;
-}
-
-function normalizeDate(value) {
-  if (!value) return null;
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return null;
-  const iso = date.toISOString().slice(0, 10);
-  if (iso === '1899-12-30' || iso === '1899-11-30') return null;
-  return iso;
-}
-
-function joinParts(parts) {
-  const filtered = parts.map(normalizeText).filter(Boolean);
-  return filtered.length ? filtered.join(', ') : null;
-}
-
-function joinPartsNoComma(parts) {
-  const filtered = parts.map(normalizeText).filter(Boolean);
-  return filtered.length ? filtered.join(' ') : null;
-}
-
-function cleanPhone(value) {
-  const text = normalizeText(value);
-  return text ? text.replace(/^(G\+|OPN\+)/i, '+') : null;
-}
-
-function parseDriverName(fullName, explicitSurname) {
-  const cleanFullName = normalizeText(fullName) || '';
-  const cleanSurname = normalizeText(explicitSurname);
-
-  if (cleanSurname) {
-    const firstName = cleanFullName.replace(new RegExp(`${cleanSurname}$`, 'i'), '').trim();
-    return {
-      first_name: normalizeText(firstName) || cleanFullName,
-      surname: cleanSurname
-    };
-  }
-
-  const parts = cleanFullName.split(/\s+/).filter(Boolean);
-  if (parts.length <= 1) {
-    return { first_name: cleanFullName || null, surname: null };
-  }
-
-  return {
-    first_name: parts.slice(0, -1).join(' '),
-    surname: parts[parts.length - 1]
-  };
-}
-
-function mapClient(row) {
-  const deliveryAddress = joinParts([row.DrDeliver1, row.DrDeliver2, row.DrDeliver3]);
-  const postalAddress = joinParts([row.DrAddressline1, row.DrAddressline2, row.DrAddressline3]);
-  const compactDeliveryAddress = joinPartsNoComma([row.DrDeliver1, row.DrDeliver2, row.DrDeliver3]);
-  const compactPostalAddress = joinPartsNoComma([row.DrAddressline1, row.DrAddressline2, row.DrAddressline3]);
-  const primaryAddress = deliveryAddress || postalAddress;
-  const compactPrimaryAddress = compactDeliveryAddress || compactPostalAddress || '';
-
-  return {
-    client_id: normalizeText(row.DrNumber),
-    type: 'client',
-    name: normalizeText(row.DrName),
-    address: primaryAddress || '',
-    street: '',
-    city: '',
-    state: '',
-    postal_code: compactPrimaryAddress,
-    contact_person: normalizeText(row.DrContactName),
-    contact_phone: cleanPhone(row.DrCellNo || row.DrTelephoneOps),
-    contact_email: normalizeText(row.DrEmail || row.DrOpsEmail),
-    email: '',
-    phone: cleanPhone(row.DrTelephone) || '',
-    fax_number: normalizeText(row.DrFax || row.DrFaxOPS) || '',
-    industry: '',
-    vat_number: normalizeText(row.DrVatNumber) || '',
-    status: normalizeBool(row.DrDormantFlag) ? 'Dormant' : 'Active',
-    credit_limit: normalizeNumber(row.DrCreditLimit) || 0,
-    vat_registered: normalizeBool(row.DrVatFlag) || false,
-    dormant_flag: normalizeBool(row.DrDormantFlag) || false,
-    registration_number: normalizeText(row.Drregno) || '',
-    registration_name: normalizeText(row.DrNameRegistration) || ''
-  };
-}
-
-function mapDriver(row) {
-  const parsedName = parseDriverName(row.DriverName, row.DriverSurname);
-  const dormant = normalizeBool(row.DriverDormantFlag);
-
-  return {
-    driver_code: normalizeDriverCode(row.DriverNumber),
-    first_name: parsedName.first_name,
-    surname: parsedName.surname,
-    id_or_passport_number: normalizeText(row.IdNumber),
-    id_or_passport_document: normalizeText(row.IdNumber) ? 'ID' : null,
-    email_address: normalizeText(row.DrvEmail),
-    cell_number: cleanPhone(row.CellNumber),
-    license_expiry_date: normalizeDate(row.LicenseDate),
-    professional_driving_permit: row.PDPDate ? true : false,
-    pdp_expiry_date: normalizeDate(row.PDPDate),
-    appointment_date: normalizeDate(row.Appointmentdate),
-    apointment_date: normalizeDate(row.Appointmentdate),
-    passport_expiry: normalizeDate(row.PassportDate),
-    passport_status: normalizeText(row.PassportNo),
-    hazCamDate: normalizeDate(row.HazChemDate),
-    medic_exam_date: normalizeDate(row.MedicalExaminationDate),
-    pop: normalizeText(row.DrvProofOfPayment),
-    available: dormant === null ? true : !dormant,
-    status: dormant ? 'Dormant' : 'Active'
-  };
-}
-
-function mapVehicle(row) {
-  return {
-    registration_number: normalizeText(row.Registration),
-    make: normalizeText(row.Make),
-    model: normalizeText(row.Model),
-    vehicle_number: normalizeText(row.VehicleNumber),
-    vehicle_year: normalizeText(row.VehicleYear),
-    speedo_current: normalizeNumber(row.SpeedoCurrent),
-    driver_code: normalizeText(row.DriverCode),
-    driver_name: normalizeText(row.DriverName),
-    branch_code: normalizeText(row.BranchCode),
-    branch_name: normalizeText(row.BranchName),
-    licence_date: normalizeDate(row.LicenceDate),
-    cof_date: normalizeDate(row.COFDate),
-    hazchem: normalizeBool(row.Hazchem),
-    veh_dormant_flag: normalizeBool(row.VehDormantFlag),
-    vehicle_category: normalizeText(row.VehicleCategory),
-    department_code: normalizeText(row.departmentcode),
-    department_name: normalizeText(row.departmentname),
-    project_code: normalizeText(row.projectcode)
-  };
-}
-
-function valuesEqual(a, b) {
-  return JSON.stringify(a) === JSON.stringify(b);
-}
+const {
+  normalizeText, normalizeDriverCode, normalizeDate, normalizeBool, normalizeNumber,
+  joinParts, joinPartsNoComma, cleanPhone, parseDriverName, valuesEqual,
+  mapClient, mapDriver, mapVehicle
+} = require('../config/supabase-sync');
 
 function buildDiff(currentRow, nextRow) {
   const diff = [];
@@ -196,7 +39,7 @@ async function fetchTarget(table, keyColumn, keyValue) {
   return (data || [])[0] || null;
 }
 
-async function getSourceRows(type) {
+function getSourceRows(type) {
   if (type === 'clients') return getDrivers();
   if (type === 'drivers') return getDriverMaster();
   if (type === 'vehicles') return getVehicles();
