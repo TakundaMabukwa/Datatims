@@ -15,10 +15,11 @@ async function run() {
 
   for (const result of summary.results) {
     console.log(
-      `[SYNC:${result.label}] source=${result.sourceCount} comparable=${result.comparableCount} existing=${result.existingCount} inserted=${result.inserted} updated=${result.updated} unchanged=${result.unchanged}`
+      `[SYNC:${result.label}] source=${result.sourceCount} comparable=${result.comparableCount} existing=${result.existingCount} inserted=${result.inserted} updated=${result.updated} deleted=${result.deleted ?? 0} unchanged=${result.unchanged}`
     );
     printSample(result.label, 'insert', result.insertedKeys);
     printSample(result.label, 'update', result.updatedKeys);
+    printSample(result.label, 'delete', result.deletedKeys);
     printSample(result.label, 'skipped missing in Supabase', result.skippedInsertKeys);
   }
 
