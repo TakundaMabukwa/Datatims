@@ -427,6 +427,21 @@ async function updateByMatchBatch(supabase, table, rows, keyColumn, dryRun) {
   }
 }
 
+async function deleteBatch(supabase, table, keyColumn, keys, dryRun) {
+  if (!keys.length || dryRun) return;
+
+  for (const keyChunk of chunk(keys, BATCH_SIZE)) {
+    const { error } = await supabase
+      .from(table)
+      .delete()
+      .in(keyColumn, keyChunk);
+
+    if (error) {
+      throw new Error(`Supabase delete failed for ${table}: ${error.message}`);
+    }
+  }
+}
+
 async function syncClientsTable({ supabase, sourceRows, dryRun }) {
   const mappedRows = sourceRows
     .map(mapClient)
@@ -477,6 +492,28 @@ async function syncClientsTable({ supabase, sourceRows, dryRun }) {
     await insertBatch(supabase, 'eps_client_list', rowChunk, dryRun);
   }
 
+  const clientSourceKeySet = new Set(mappedRows.map(row => normalizeText(row.client_id)));
+
+  const { data: allSupabaseClients, error: clientFetchError } = await supabase
+    .from('eps_client_list')
+    .select('client_id');
+
+  if (clientFetchError) {
+    throw new Error(`Supabase select failed for eps_client_list: ${clientFetchError.message}`);
+  }
+
+  const clientsToDelete = [];
+  for (const row of (allSupabaseClients || [])) {
+    const key = normalizeText(row.client_id);
+    if (key && !clientSourceKeySet.has(key)) {
+      clientsToDelete.push(row.client_id);
+    }
+  }
+
+  for (const keyChunk of chunk(clientsToDelete, BATCH_SIZE)) {
+    await deleteBatch(supabase, 'eps_client_list', 'client_id', keyChunk, dryRun);
+  }
+
   return {
     label: 'clients',
     sourceCount: sourceRows.length,
@@ -484,6 +521,7 @@ async function syncClientsTable({ supabase, sourceRows, dryRun }) {
     existingCount: existingRows.length,
     inserted,
     updated,
+    deleted: clientsToDelete.length,
     unchanged: mappedRows.length - inserted - updated,
     insertedKeys,
     updatedKeys,
@@ -557,6 +595,28 @@ async function syncDriversTable({ supabase, sourceRows, dryRun }) {
     await insertBatch(supabase, 'drivers', rowChunk, dryRun);
   }
 
+  const sourceKeySet = new Set(mappedRows.map(row => normalizeDriverCode(row.driver_code)));
+
+  const { data: allSupabaseDrivers, error: fetchError } = await supabase
+    .from('drivers')
+    .select('driver_code');
+
+  if (fetchError) {
+    throw new Error(`Supabase select failed for drivers: ${fetchError.message}`);
+  }
+
+  const toDelete = [];
+  for (const row of (allSupabaseDrivers || [])) {
+    const canonical = normalizeDriverCode(row.driver_code);
+    if (canonical && !sourceKeySet.has(canonical)) {
+      toDelete.push(row.driver_code);
+    }
+  }
+
+  for (const keyChunk of chunk(toDelete, BATCH_SIZE)) {
+    await deleteBatch(supabase, 'drivers', 'driver_code', keyChunk, dryRun);
+  }
+
   return {
     label: 'drivers',
     sourceCount: sourceRows.length,
@@ -564,9 +624,11 @@ async function syncDriversTable({ supabase, sourceRows, dryRun }) {
     existingCount: existingRows.length,
     inserted,
     updated,
+    deleted: toDelete.length,
     unchanged: mappedRows.length - inserted - updated,
     insertedKeys,
-    updatedKeys
+    updatedKeys,
+    deletedKeys: toDelete
   };
 }
 
@@ -620,6 +682,28 @@ async function syncTable({ supabase, table, sourceRows, mapRow, conflictColumn, 
     await insertBatch(supabase, table, rowChunk, dryRun);
   }
 
+  const tableSourceKeySet = new Set(mappedRows.map(row => normalizeText(row[conflictColumn])));
+
+  const { data: allSupabaseRows, error: fetchError } = await supabase
+    .from(table)
+    .select(conflictColumn);
+
+  if (fetchError) {
+    throw new Error(`Supabase select failed for ${table}: ${fetchError.message}`);
+  }
+
+  const toDelete = [];
+  for (const row of (allSupabaseRows || [])) {
+    const key = normalizeText(row[conflictColumn]);
+    if (key && !tableSourceKeySet.has(key)) {
+      toDelete.push(row[conflictColumn]);
+    }
+  }
+
+  for (const keyChunk of chunk(toDelete, BATCH_SIZE)) {
+    await deleteBatch(supabase, table, conflictColumn, keyChunk, dryRun);
+  }
+
   return {
     label,
     sourceCount: sourceRows.length,
@@ -627,9 +711,11 @@ async function syncTable({ supabase, table, sourceRows, mapRow, conflictColumn, 
     existingCount: existingRows.length,
     inserted,
     updated,
+    deleted: toDelete.length,
     unchanged: mappedRows.length - inserted - updated,
     insertedKeys,
-    updatedKeys
+    updatedKeys,
+    deletedKeys: toDelete
   };
 }
 
