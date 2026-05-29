@@ -752,7 +752,7 @@ async function syncDriversTable({ supabase, sourceRows, dryRun }) {
 
     const { data: linkedDrivers, error: linkedError } = await supabase
       .from('drivers')
-      .select('driver_code, user_id')
+      .select('driver_code, user_id, email_address, first_name, surname, cell_number')
       .not('email_address', 'is', null)
       .not('user_id', 'is', null);
 
@@ -762,8 +762,18 @@ async function syncDriversTable({ supabase, sourceRows, dryRun }) {
       for (const driver of linkedDrivers) {
         const ok = await setDriverAuthPassword(supabase, driver.user_id, ensureMinPassword(driver.driver_code));
         if (ok) passwordReset++;
+
+        await supabase
+          .from('users')
+          .update({
+            email: driver.email_address.toLowerCase().trim(),
+            name: driver.first_name || null,
+            last_name: driver.surname || null,
+            phone: driver.cell_number || null
+          })
+          .eq('id', driver.user_id);
       }
-      console.log(`[SYNC:drivers] Reset passwords for ${passwordReset}/${linkedDrivers.length} linked drivers`);
+      console.log(`[SYNC:drivers] Reset passwords and updated profiles for ${passwordReset}/${linkedDrivers.length} linked drivers`);
     }
   }
 
