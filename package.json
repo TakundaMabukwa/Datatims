@@ -28,14 +28,19 @@
     "fetch:view": "node scripts/fetch-view.js",
     "test": "npm run test:net && npm run test:db"
   },
-  "keywords": ["express", "mysql", "api"],
+  "keywords": [
+    "express",
+    "mysql",
+    "api"
+  ],
   "author": "",
   "license": "ISC",
   "dependencies": {
     "@supabase/supabase-js": "^2.49.8",
-    "express": "^5.0.0",
-    "mysql2": "^3.11.3",
     "dotenv": "^16.4.5",
-    "helmet": "^8.0.0"
+    "express": "^5.0.0",
+    "helmet": "^8.0.0",
+    "mysql2": "^3.11.3",
+    "xlsx": "^0.18.5"
   }
 }
