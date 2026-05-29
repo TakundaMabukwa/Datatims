@@ -26,6 +26,12 @@ async function setPassword(userId, password) {
   return !error;
 }
 
+async function setAuthEmail(userId, email) {
+  const { error } = await supabase.auth.admin.updateUserById(userId, { email, email_confirm: true });
+  if (error) console.error(`  Failed to update auth email: ${error.message}`);
+  return !error;
+}
+
 async function run() {
   const wb = XLSX.readFile('scripts/master file.xlsx');
   const sheet = wb.Sheets[wb.SheetNames[0]];
@@ -82,6 +88,7 @@ async function run() {
     updated++;
 
     if (driver.user_id) {
+      await setAuthEmail(driver.user_id, email);
       await setPassword(driver.user_id, ensureMinPassword(driverCode));
       await supabase.from('users').update({ email }).eq('id', driver.user_id);
       console.log(`LINK  ${driverCode} → ${email} (existing user_id: ${driver.user_id})`);
@@ -105,6 +112,7 @@ async function run() {
         console.log(`ERROR linking ${driverCode} to existing user: ${linkErr.message}`);
         skipped++;
       } else {
+        await setAuthEmail(existingUser.id, email);
         await setPassword(existingUser.id, ensureMinPassword(driverCode));
         await supabase.from('users').update({ email }).eq('id', existingUser.id);
         console.log(`LINK  ${driverCode} → ${email} (existing public.users row)`);
@@ -128,6 +136,7 @@ async function run() {
         if (found) {
           await supabase.from('drivers').update({ user_id: found.id }).eq('driver_code', driverCode);
           await supabase.from('users').insert({ id: found.id, email, role: 'driver', is_active: true });
+          await setAuthEmail(found.id, email);
           await setPassword(found.id, ensureMinPassword(driverCode));
           console.log(`LINK  ${driverCode} → ${email} (existing auth, created public.users)`);
           linked++;
