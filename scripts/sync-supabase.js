@@ -14,8 +14,9 @@ async function run() {
   const summary = await runSupabaseSync({ dryRun: DRY_RUN });
 
   for (const result of summary.results) {
+    const authInfo = result.authCreated !== undefined ? ` authCreated=${result.authCreated} authSkipped=${result.authSkipped}` : '';
     console.log(
-      `[SYNC:${result.label}] source=${result.sourceCount} comparable=${result.comparableCount} existing=${result.existingCount} inserted=${result.inserted} updated=${result.updated} deleted=${result.deleted ?? 0} unchanged=${result.unchanged}`
+      `[SYNC:${result.label}] source=${result.sourceCount} comparable=${result.comparableCount} existing=${result.existingCount} inserted=${result.inserted} updated=${result.updated} deleted=${result.deleted ?? 0} unchanged=${result.unchanged}${authInfo}`
     );
     printSample(result.label, 'insert', result.insertedKeys);
     printSample(result.label, 'update', result.updatedKeys);

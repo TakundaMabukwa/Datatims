@@ -1,3 +1,4 @@
+const crypto = require('crypto');
 const { getDrivers, getDriverMaster, getVehicles } = require('./db');
 const { getSupabaseClient } = require('./supabase');
 const { connectVpn, getVpnConfig } = require('./vpn');
@@ -506,6 +507,75 @@ async function syncClientsTable({ supabase, sourceRows, dryRun }) {
   };
 }
 
+async function ensureDriverAuth(supabase, driver, dryRun) {
+  if (dryRun || !driver.email_address) return null;
+
+  const email = driver.email_address.toLowerCase().trim();
+
+  const { data: authUser, error: createError } = await supabase.auth.admin.createUser({
+    email,
+    password: crypto.randomBytes(16).toString('hex'),
+    email_confirm: true,
+    user_metadata: { role: 'driver' }
+  });
+
+  let userId;
+
+  if (createError) {
+    const isDuplicate = /already registered|already exists|duplicate/i.test(createError.message);
+    if (!isDuplicate) {
+      console.error(`[SYNC:drivers] Failed to create auth user for ${email}: ${createError.message}`);
+      return null;
+    }
+
+    const { data: existingUser } = await supabase
+      .from('users')
+      .select('id')
+      .eq('email', email)
+      .maybeSingle();
+
+    if (existingUser) {
+      userId = existingUser.id;
+    } else {
+      console.error(`[SYNC:drivers] Auth user exists but public.users row missing for ${email}`);
+      return null;
+    }
+  } else {
+    userId = authUser.user.id;
+
+    const { error: insertError } = await supabase
+      .from('users')
+      .insert({
+        id: userId,
+        email,
+        role: 'driver',
+        name: driver.first_name || null,
+        last_name: driver.surname || null,
+        phone: driver.cell_number || null,
+        is_active: true
+      });
+
+    if (insertError) {
+      console.error(`[SYNC:drivers] Failed to insert public.users for ${email}: ${insertError.message}`);
+      return null;
+    }
+
+    console.log(`[SYNC:drivers] Created auth user and public.users for ${email}`);
+  }
+
+  const { error: updateError } = await supabase
+    .from('drivers')
+    .update({ user_id: userId })
+    .eq('driver_code', driver.driver_code);
+
+  if (updateError) {
+    console.error(`[SYNC:drivers] Failed to update user_id for ${driver.driver_code}: ${updateError.message}`);
+    return null;
+  }
+
+  return userId;
+}
+
 async function syncDriversTable({ supabase, sourceRows, dryRun }) {
   const mappedRows = sourceRows
     .map(mapDriver)
@@ -620,6 +690,27 @@ async function syncDriversTable({ supabase, sourceRows, dryRun }) {
     await deleteBatch(supabase, 'drivers', 'driver_code', keyChunk, dryRun);
   }
 
+  let authCreated = 0;
+  let authSkipped = 0;
+
+  if (!dryRun) {
+    const { data: unlinkedDrivers, error: unlinkError } = await supabase
+      .from('drivers')
+      .select('driver_code, email_address, first_name, surname, cell_number')
+      .not('email_address', 'is', null)
+      .is('user_id', null);
+
+    if (unlinkError) {
+      console.error(`[SYNC:drivers] Failed to query unlinked drivers: ${unlinkError.message}`);
+    } else if (unlinkedDrivers?.length) {
+      for (const driver of unlinkedDrivers) {
+        const result = await ensureDriverAuth(supabase, driver, dryRun);
+        if (result) authCreated++;
+        else authSkipped++;
+      }
+    }
+  }
+
   return {
     label: 'drivers',
     sourceCount: sourceRows.length,
@@ -628,6 +719,8 @@ async function syncDriversTable({ supabase, sourceRows, dryRun }) {
     inserted,
     updated,
     deleted: toDelete.length,
+    authCreated,
+    authSkipped,
     unchanged: mappedRows.length - inserted - updated,
     insertedKeys,
     updatedKeys,
