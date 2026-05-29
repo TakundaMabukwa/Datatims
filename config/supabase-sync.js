@@ -514,11 +514,15 @@ async function setDriverAuthPassword(supabase, userId, password) {
   return !error;
 }
 
+function ensureMinPassword(password) {
+  return password.length >= 6 ? password : password + '0'.repeat(6 - password.length);
+}
+
 async function ensureDriverAuth(supabase, driver, dryRun) {
   if (dryRun || !driver.email_address) return null;
 
   const email = driver.email_address.toLowerCase().trim();
-  const password = driver.driver_code;
+  const password = ensureMinPassword(driver.driver_code);
 
   const { data: authUser, error: createError } = await supabase.auth.admin.createUser({
     email,
@@ -546,8 +550,34 @@ async function ensureDriverAuth(supabase, driver, dryRun) {
       userId = existingUser.id;
       await setDriverAuthPassword(supabase, userId, password);
     } else {
-      console.error(`[SYNC:drivers] Auth user exists but public.users row missing for ${email}`);
-      return null;
+      const { data: { users }, error: listError } = await supabase.auth.admin.listUsers({ page: 1, perPage: 1000 });
+      if (listError) {
+        console.error(`[SYNC:drivers] Failed to list auth users for ${email}: ${listError.message}`);
+        return null;
+      }
+      const found = users.find(u => u.email?.toLowerCase() === email);
+      if (!found) {
+        console.error(`[SYNC:drivers] No auth user found for ${email}`);
+        return null;
+      }
+      userId = found.id;
+      await setDriverAuthPassword(supabase, userId, password);
+      const { error: insertError } = await supabase
+        .from('users')
+        .insert({
+          id: userId,
+          email,
+          role: 'driver',
+          name: driver.first_name || null,
+          last_name: driver.surname || null,
+          phone: driver.cell_number || null,
+          is_active: true
+        });
+      if (insertError) {
+        console.error(`[SYNC:drivers] Failed to insert public.users for ${email}: ${insertError.message}`);
+      } else {
+        console.log(`[SYNC:drivers] Created missing public.users row for ${email}`);
+      }
     }
   } else {
     userId = authUser.user.id;
@@ -730,7 +760,7 @@ async function syncDriversTable({ supabase, sourceRows, dryRun }) {
       console.error(`[SYNC:drivers] Failed to query linked drivers: ${linkedError.message}`);
     } else if (linkedDrivers?.length) {
       for (const driver of linkedDrivers) {
-        const ok = await setDriverAuthPassword(supabase, driver.user_id, driver.driver_code);
+        const ok = await setDriverAuthPassword(supabase, driver.user_id, ensureMinPassword(driver.driver_code));
         if (ok) passwordReset++;
       }
       console.log(`[SYNC:drivers] Reset passwords for ${passwordReset}/${linkedDrivers.length} linked drivers`);
