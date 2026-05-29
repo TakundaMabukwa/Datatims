@@ -506,14 +506,23 @@ async function syncClientsTable({ supabase, sourceRows, dryRun }) {
   };
 }
 
+async function setDriverAuthPassword(supabase, userId, password) {
+  const { error } = await supabase.auth.admin.updateUserById(userId, { password });
+  if (error) {
+    console.error(`[SYNC:drivers] Failed to reset password for user ${userId}: ${error.message}`);
+  }
+  return !error;
+}
+
 async function ensureDriverAuth(supabase, driver, dryRun) {
   if (dryRun || !driver.email_address) return null;
 
   const email = driver.email_address.toLowerCase().trim();
+  const password = driver.driver_code;
 
   const { data: authUser, error: createError } = await supabase.auth.admin.createUser({
     email,
-    password: driver.driver_code,
+    password,
     email_confirm: true,
     user_metadata: { role: 'driver' }
   });
@@ -535,6 +544,7 @@ async function ensureDriverAuth(supabase, driver, dryRun) {
 
     if (existingUser) {
       userId = existingUser.id;
+      await setDriverAuthPassword(supabase, userId, password);
     } else {
       console.error(`[SYNC:drivers] Auth user exists but public.users row missing for ${email}`);
       return null;
@@ -691,6 +701,7 @@ async function syncDriversTable({ supabase, sourceRows, dryRun }) {
 
   let authCreated = 0;
   let authSkipped = 0;
+  let passwordReset = 0;
 
   if (!dryRun) {
     const { data: unlinkedDrivers, error: unlinkError } = await supabase
@@ -708,6 +719,22 @@ async function syncDriversTable({ supabase, sourceRows, dryRun }) {
         else authSkipped++;
       }
     }
+
+    const { data: linkedDrivers, error: linkedError } = await supabase
+      .from('drivers')
+      .select('driver_code, user_id')
+      .not('email_address', 'is', null)
+      .not('user_id', 'is', null);
+
+    if (linkedError) {
+      console.error(`[SYNC:drivers] Failed to query linked drivers: ${linkedError.message}`);
+    } else if (linkedDrivers?.length) {
+      for (const driver of linkedDrivers) {
+        const ok = await setDriverAuthPassword(supabase, driver.user_id, driver.driver_code);
+        if (ok) passwordReset++;
+      }
+      console.log(`[SYNC:drivers] Reset passwords for ${passwordReset}/${linkedDrivers.length} linked drivers`);
+    }
   }
 
   return {
@@ -720,6 +747,7 @@ async function syncDriversTable({ supabase, sourceRows, dryRun }) {
     deleted: toDelete.length,
     authCreated,
     authSkipped,
+    passwordReset,
     unchanged: mappedRows.length - inserted - updated,
     insertedKeys,
     updatedKeys,
