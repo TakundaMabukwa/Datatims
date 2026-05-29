@@ -514,7 +514,9 @@ async function setDriverAuthPassword(supabase, userId, password) {
 }
 
 function ensureMinPassword(password) {
-  return password.length >= 6 ? password : password + '0'.repeat(6 - password.length);
+  if (password.length >= 6) return password;
+  const rest = password.replace(/^EPS/i, '');
+  return `EPS00${rest}`;
 }
 
 async function ensureDriverAuth(supabase, driver, dryRun) {

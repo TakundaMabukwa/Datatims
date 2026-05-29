@@ -15,7 +15,9 @@ function normalizeDriverCode(value) {
 }
 
 function ensureMinPassword(pw) {
-  return pw.length >= 6 ? pw : pw + '0'.repeat(6 - pw.length);
+  if (pw.length >= 6) return pw;
+  const rest = pw.replace(/^EPS/i, '');
+  return `EPS00${rest}`;
 }
 
 async function setPassword(userId, password) {
