@@ -1,4 +1,3 @@
-const crypto = require('crypto');
 const { getDrivers, getDriverMaster, getVehicles } = require('./db');
 const { getSupabaseClient } = require('./supabase');
 const { connectVpn, getVpnConfig } = require('./vpn');
@@ -514,7 +513,7 @@ async function ensureDriverAuth(supabase, driver, dryRun) {
 
   const { data: authUser, error: createError } = await supabase.auth.admin.createUser({
     email,
-    password: crypto.randomBytes(16).toString('hex'),
+    password: driver.driver_code,
     email_confirm: true,
     user_metadata: { role: 'driver' }
   });
