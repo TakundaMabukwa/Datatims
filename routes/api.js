@@ -159,4 +159,45 @@ router.post('/sync-supabase', async (req, res, next) => {
   }
 });
 
+/**
+ * GET /api/driver-credentials
+ * Download driver emails and passwords as CSV
+ */
+router.get('/driver-credentials', async (req, res, next) => {
+  try {
+    const { createClient } = require('@supabase/supabase-js');
+    const supabase = createClient(
+      process.env.SUPABASE_URL,
+      process.env.SUPABASE_SERVICE_ROLE_KEY,
+      { auth: { persistSession: false, autoRefreshToken: false } }
+    );
+
+    function ensureMinPassword(pw) {
+      if (pw.length >= 6) return pw;
+      const rest = pw.replace(/^EPS/i, '');
+      return `EPS00${rest}`;
+    }
+
+    const { data, error } = await supabase
+      .from('drivers')
+      .select('driver_code, email_address, first_name, surname')
+      .not('email_address', 'is', null)
+      .order('driver_code');
+
+    if (error) throw new Error(error.message);
+
+    let csv = 'driver_code,email,password\n';
+    for (const d of data) {
+      const pass = ensureMinPassword(d.driver_code);
+      csv += `${d.driver_code},${d.email_address},${pass}\n`;
+    }
+
+    res.setHeader('Content-Type', 'text/csv');
+    res.setHeader('Content-Disposition', 'attachment; filename="driver-credentials.csv"');
+    res.send(csv);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 module.exports = router;
