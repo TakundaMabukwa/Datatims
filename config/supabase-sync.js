@@ -155,7 +155,6 @@ function mapDriver(row) {
     surname: parsedName.surname,
     id_or_passport_number: normalizeText(row.IdNumber),
     id_or_passport_document: normalizeText(row.IdNumber) ? 'ID' : null,
-    email_address: normalizeText(row.DrvEmail),
     cell_number: cleanPhone(row.CellNumber),
     license_expiry_date: normalizeDate(row.LicenseDate),
     professional_driving_permit: row.PDPDate ? true : false,
