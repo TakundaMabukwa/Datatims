@@ -198,7 +198,7 @@ function mapVehicle(row) {
     veh_location: normalizeText(row.VehLocation),
     branch_code: normalizeText(row.BranchCode),
     branch_name: normalizeText(row.BranchName),
-    licence_date: normalizeDate(row.LicenceDate),
+    licence_date: normalizeDate(row.COFDate),
     cof_date: normalizeDate(row.COFDate),
     botswana: normalizeBool(row.Botswana),
     namibia: normalizeBool(row.Namibia),
