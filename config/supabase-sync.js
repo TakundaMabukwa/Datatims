@@ -706,6 +706,8 @@ async function syncDriversTable({ supabase, sourceRows, dryRun }) {
     const candidateIds = toDelete.map(code => codeToId.get(normalizeDriverCode(code))).filter(Boolean);
 
     if (candidateIds.length) {
+      let referencedIds = new Set();
+
       const { data: referencedVehicles, error: vehError } = await supabase
         .from('vehiclesc')
         .select('driver_id')
@@ -715,13 +717,28 @@ async function syncDriversTable({ supabase, sourceRows, dryRun }) {
         throw new Error(`Supabase select failed for vehiclesc: ${vehError.message}`);
       }
 
-      const referencedIds = new Set((referencedVehicles || []).map(r => r.driver_id).filter(Boolean));
+      for (const r of (referencedVehicles || [])) {
+        if (r.driver_id) referencedIds.add(r.driver_id);
+      }
+
+      const { data: referencedInspections, error: inspError } = await supabase
+        .from('vehicle_inspections')
+        .select('driver_id')
+        .in('driver_id', candidateIds);
+
+      if (inspError) {
+        throw new Error(`Supabase select failed for vehicle_inspections: ${inspError.message}`);
+      }
+
+      for (const r of (referencedInspections || [])) {
+        if (r.driver_id) referencedIds.add(r.driver_id);
+      }
 
       const skippedDueToRefs = toDelete.filter(code => referencedIds.has(codeToId.get(normalizeDriverCode(code))));
       toDelete = toDelete.filter(code => !referencedIds.has(codeToId.get(normalizeDriverCode(code))));
 
       if (skippedDueToRefs.length) {
-        console.log(`[SYNC:drivers] skipped ${skippedDueToRefs.length} driver(s) still referenced by vehicles: ${skippedDueToRefs.slice(0, 10).join(', ')}${skippedDueToRefs.length > 10 ? '...' : ''}`);
+        console.log(`[SYNC:drivers] skipped ${skippedDueToRefs.length} driver(s) still referenced by vehicles/inspections: ${skippedDueToRefs.slice(0, 10).join(', ')}${skippedDueToRefs.length > 10 ? '...' : ''}`);
       }
     }
   }
